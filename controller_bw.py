@@ -8,7 +8,7 @@ c_minimega = False
 max_avail_bw = 50000 #Kpbs
 
 
-def controller_bw(frame_size, cam_id, data_json, overlap_thresh=0.7):
+def controller_bw(frame_size, cam_id, data_json, w1, w2, overlap_thresh=0.7):
 
 	cam_num = int(cam_id)
 
@@ -27,31 +27,36 @@ def controller_bw(frame_size, cam_id, data_json, overlap_thresh=0.7):
 		feature_per_cam = []
 		for j in data_json[i]['unique_obj_bbox']:
 			total_length_per_cam = total_length_per_cam + data_json[i]['unique_obj_bbox'][j]['length']
-			print(data_json[i]['unique_obj_bbox'][j]['length'])
 			feature_per_cam.append(data_json[i]['unique_obj_bbox'][j]['feature'])
 		total_length_cam[i] = total_length_per_cam
-		feature_cam.append(features)
+		feature_cam.append(feature_per_cam)
 
 	# bias: find the occurances of commonly objects
-	bias = [0] * cam_num
+	biases = [0] * cam_num
 	for i in range(len(feature_cam)):
 		for j in range(i+1, len(feature_cam)):
 			for k in feature_cam[i]:
 				for l in feature_cam[j]:
 					if dist.eucliean(k, l) > overlap_thresh:
 						# there is a common objects in the 2 cameras
-						bias[i] = bias[i] + 1
-						bias[j] = bias[j] - 1
+						if(total_length_cam[i] > total_length_cam[j]):
+							biases[i] = biases[i] + 1
+							biases[j] = biases[j] - 1
+						else:
+							biases[i] = biases[i] - 1
+							biases[j] = biases[j] + 1
 
 	# step 2: optimize
 	for i in range(cam_num):
 		x1 = data_json[i]['total_obj'] / total_obj # static information
 		x2 = total_length_cam[i] / sum(total_length_cam)
-		bias = bias[i] / sum(bias)
+		if(sum(biases) != 0):
+			bias = biases[i] / sum (biases)
+		else:
+			bias = 0
 		cam_pr_list_t[i] = w1 * x1 + w2 * x2 - bias
 
 	return cam_pr_list_t
-
 
 
 if __name__ == '__main__':
@@ -96,9 +101,12 @@ if __name__ == '__main__':
 
 		index = 0
 		for nataddr in nataddrs:
-			bitrate = cam_pr_list_t[0] * max_avail_bw
+			bitrate = int(cam_pr_list_t[0] * max_avail_bw)
+			vid_data = requests.get('http://%s:5002/video' % nataddr[1:-1], params={'start_id': start_id, 'bitrate': bitrate}).content
 
-			vid_data = requests.get('http://%s:5002/video' % nataddr[1:-1], params={'bitrate': bitrate})
+			# write to somewhere for save
+			os.makedirs('/media/waynewhbaaa/Elements/myexp-temp/' + str(index), exist_ok=True)
+			with open(os.path.join('/media/waynewhbaaa/Elements/myexp-temp/' + str(index), str(i) + ".mp4"), "wb") as f:
+				f.write(vid_data)
 
-			# write to somewhere for savej
 			index = index + 1

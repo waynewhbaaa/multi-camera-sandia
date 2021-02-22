@@ -3,6 +3,7 @@ import cv2
 from darknet import darknet
 import numpy as np
 import math
+import subprocess
 
 from deep_sort import preprocessing
 from deep_sort import nn_matching
@@ -112,7 +113,7 @@ class Client:
 
                 if track.track_id not in unique_obj_bbox:
                     # unique_obj_bbox.append(track.track_id)
-                    unique_obj_bbox[track.track_id] = {'feature': [] }# track.features[0].tolist()}
+                    unique_obj_bbox[track.track_id] = {'feature': track.features[0].tolist()}
                     unique_obj_bbox[track.track_id]['length'] = 0
 
                 # find the center point of the tracking object
@@ -136,39 +137,40 @@ class Client:
 
         self.displacement_check = displacement_check
         # print(displacement_check)
-        print(unique_obj_bbox)
         return {'total_obj': total_obj, 'unique_obj_bbox': unique_obj_bbox}
 
 
-    def second_phase(self, bitrate):
-        if not qp:
+    def second_phase(self, bitrate, start_id):
+        encoded_vid_path = os.path.join(self.temp_dir, "temp.mp4")
+        if not bitrate:
             encoding_result = subprocess.run(["ffmpeg", "-y",
                                               "-loglevel", "error",
                                               "-start_number", str(start_id),
-                                              '-i', f"{images_path}/%010d.png",
+                                              '-i', f"{self.dataset_dir}/%010d.png",
                                               "-vcodec", "libx264", "-g", "15",
                                               "-keyint_min", "15",
                                               "-pix_fmt", "yuv420p",
-                                              "-vf", scale,
                                               "-frames:v",
-                                              str(number_of_frames),
+                                              str(self.batch_size),
                                               encoded_vid_path],
                                              stdout=subprocess.PIPE,
                                              stderr=subprocess.PIPE,
                                              universal_newlines=True)
         else:
+            rate=str(bitrate)+"k"
             encoding_result = subprocess.run(["ffmpeg", "-y",
                                               "-loglevel", "error",
                                               "-start_number", str(start_id),
-                                              '-i', f"{images_path}/%010d.png",
+                                              '-i', f"{self.dataset_dir}/%010d.png",
                                               "-vcodec", "libx264",
                                               "-g", "15",
                                               "-keyint_min", "15",
-                                              "-qp", f"{qp}",
+                                              "-maxrate", f"{rate}",
+                                              "-b", f"{rate}",
+                                              "-bufsize", f"{rate}",
                                               "-pix_fmt", "yuv420p",
-                                              "-vf", scale,
                                               "-frames:v",
-                                              str(number_of_frames),
+                                              str(self.batch_size),
                                               encoded_vid_path],
                                              stdout=subprocess.PIPE,
                                              stderr=subprocess.PIPE,
